@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Trading App",
+    "slug": "trading-app",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTabletMode": true
+    }
+  }
+}
