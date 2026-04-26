@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback } from "react";
+import { getMultipleStocks, getHistoricalData } from "./apiService";
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Dimensions, Platform, FlatList,
@@ -78,80 +79,8 @@ const NSE_TOP100 = [
   { symbol: "JSWSTEEL",    name: "JSW Steel",                price: 956.75,  change: 2.34,  mktCap: "2.3L",   sector: "Metal",    signal: "BUY",  rsi: 45 },
   { symbol: "NESTLEIND",   name: "Nestle India",             price: 2387.60, change: 0.12,  mktCap: "2.3L",   sector: "FMCG",     signal: "HOLD", rsi: 58 },
   { symbol: "TECHM",       name: "Tech Mahindra",            price: 1567.80, change: -0.89, mktCap: "1.5L",   sector: "IT",       signal: "SELL", rsi: 69 },
-  { symbol: "GRASIM",      name: "Grasim Industries",        price: 2789.45, change: 1.56,  mktCap: "1.8L",   sector: "Cement",   signal: "BUY",  rsi: 53 },
-  { symbol: "INDUSINDBK",  name: "IndusInd Bank",            price: 1089.30, change: -1.23, mktCap: "0.8L",   sector: "Finance",  signal: "SELL", rsi: 68 },
-  { symbol: "HINDALCO",    name: "Hindalco Industries",      price: 678.90,  change: 2.89,  mktCap: "1.5L",   sector: "Metal",    signal: "BUY",  rsi: 44 },
-  { symbol: "BPCL",        name: "BPCL",                     price: 342.60,  change: 1.67,  mktCap: "1.5L",   sector: "Energy",   signal: "BUY",  rsi: 50 },
-  { symbol: "CIPLA",       name: "Cipla Ltd",                price: 1567.40, change: -0.34, mktCap: "1.3L",   sector: "Pharma",   signal: "HOLD", rsi: 61 },
-  { symbol: "TATACONSUM",  name: "Tata Consumer Products",   price: 1123.45, change: 0.78,  mktCap: "1.1L",   sector: "FMCG",     signal: "BUY",  rsi: 55 },
-  { symbol: "COALINDIA",   name: "Coal India",               price: 478.90,  change: 2.12,  mktCap: "2.9L",   sector: "Mining",   signal: "BUY",  rsi: 48 },
-  { symbol: "DRREDDY",     name: "Dr Reddy's Labs",          price: 6789.30, change: -0.67, mktCap: "1.1L",   sector: "Pharma",   signal: "HOLD", rsi: 64 },
-  { symbol: "EICHERMOT",   name: "Eicher Motors",            price: 4987.65, change: 1.89,  mktCap: "1.4L",   sector: "Auto",     signal: "BUY",  rsi: 57 },
-  { symbol: "HEROMOTOCO",  name: "Hero MotoCorp",            price: 4512.30, change: 1.23,  mktCap: "0.9L",   sector: "Auto",     signal: "BUY",  rsi: 54 },
-  { symbol: "APOLLOHOSP",  name: "Apollo Hospitals",         price: 6789.40, change: 2.34,  mktCap: "0.9L",   sector: "Health",   signal: "BUY",  rsi: 60 },
-  { symbol: "DIVISLAB",    name: "Divi's Laboratories",      price: 4512.80, change: -0.89, mktCap: "1.2L",   sector: "Pharma",   signal: "SELL", rsi: 70 },
-  { symbol: "SBILIFE",     name: "SBI Life Insurance",       price: 1789.65, change: 0.45,  mktCap: "1.8L",   sector: "Finance",  signal: "HOLD", rsi: 57 },
-  { symbol: "HDFCLIFE",    name: "HDFC Life Insurance",      price: 678.90,  change: 0.23,  mktCap: "1.4L",   sector: "Finance",  signal: "HOLD", rsi: 55 },
-  { symbol: "BAJAJ-AUTO",  name: "Bajaj Auto",               price: 9876.40, change: 1.78,  mktCap: "2.8L",   sector: "Auto",     signal: "BUY",  rsi: 53 },
-  { symbol: "BRITANNIA",   name: "Britannia Industries",     price: 5234.70, change: 0.34,  mktCap: "1.3L",   sector: "FMCG",     signal: "HOLD", rsi: 58 },
-  { symbol: "SHREECEM",    name: "Shree Cement",             price: 28760.50,change: 1.12,  mktCap: "1.0L",   sector: "Cement",   signal: "BUY",  rsi: 51 },
-  { symbol: "M&M",         name: "Mahindra & Mahindra",      price: 2987.65, change: 2.56,  mktCap: "3.7L",   sector: "Auto",     signal: "BUY",  rsi: 61 },
-  { symbol: "TATAMOTORS",  name: "Tata Motors",              price: 978.45,  change: 3.12,  mktCap: "3.6L",   sector: "Auto",     signal: "BUY",  rsi: 42 },
-  { symbol: "TATAPOWER",   name: "Tata Power",               price: 456.80,  change: 2.78,  mktCap: "1.5L",   sector: "Power",    signal: "BUY",  rsi: 47 },
-
-  // ── MID CAP TOP 50 ────────────────────────────────────────
-  { symbol: "PIDILITIND",  name: "Pidilite Industries",      price: 2867.45, change: 0.89,  mktCap: "1.4L",   sector: "Chemical", signal: "BUY",  rsi: 56 },
-  { symbol: "SIEMENS",     name: "Siemens India",            price: 6789.30, change: 1.45,  mktCap: "0.9L",   sector: "Capital",  signal: "BUY",  rsi: 58 },
-  { symbol: "HAVELLS",     name: "Havells India",            price: 1789.60, change: 0.67,  mktCap: "0.9L",   sector: "Capital",  signal: "BUY",  rsi: 55 },
-  { symbol: "DABUR",       name: "Dabur India",              price: 567.80,  change: -0.34, mktCap: "1.0L",   sector: "FMCG",     signal: "HOLD", rsi: 61 },
-  { symbol: "MUTHOOTFIN",  name: "Muthoot Finance",          price: 2134.60, change: 1.89,  mktCap: "0.6L",   sector: "Finance",  signal: "BUY",  rsi: 49 },
-  { symbol: "AUROPHARMA",  name: "Aurobindo Pharma",         price: 1234.50, change: -0.78, mktCap: "0.7L",   sector: "Pharma",   signal: "SELL", rsi: 68 },
-  { symbol: "BERGEPAINT",  name: "Berger Paints",            price: 567.30,  change: -0.56, mktCap: "0.5L",   sector: "Chemical", signal: "HOLD", rsi: 63 },
-  { symbol: "COLPAL",      name: "Colgate-Palmolive",        price: 2987.40, change: 0.23,  mktCap: "0.8L",   sector: "FMCG",     signal: "HOLD", rsi: 57 },
-  { symbol: "GODREJCP",    name: "Godrej Consumer Prod",     price: 1234.70, change: 0.45,  mktCap: "0.7L",   sector: "FMCG",     signal: "HOLD", rsi: 56 },
-  { symbol: "MARICO",      name: "Marico Ltd",               price: 678.90,  change: 0.12,  mktCap: "0.9L",   sector: "FMCG",     signal: "HOLD", rsi: 59 },
-  { symbol: "LUPIN",       name: "Lupin Ltd",                price: 2134.50, change: -1.23, mktCap: "0.5L",   sector: "Pharma",   signal: "SELL", rsi: 72 },
-  { symbol: "TORNTPHARM", name: "Torrent Pharma",            price: 3456.80, change: -0.45, mktCap: "0.6L",   sector: "Pharma",   signal: "HOLD", rsi: 64 },
-  { symbol: "AMBUJACEM",   name: "Ambuja Cements",           price: 678.45,  change: 1.34,  mktCap: "1.3L",   sector: "Cement",   signal: "BUY",  rsi: 50 },
-  { symbol: "ACCLTD",      name: "ACC Ltd",                  price: 2345.60, change: 1.12,  mktCap: "0.4L",   sector: "Cement",   signal: "BUY",  rsi: 51 },
-  { symbol: "BANKBARODA",  name: "Bank of Baroda",           price: 267.80,  change: -0.89, mktCap: "1.1L",   sector: "Finance",  signal: "HOLD", rsi: 62 },
-  { symbol: "CANBK",       name: "Canara Bank",              price: 112.45,  change: -1.23, mktCap: "0.8L",   sector: "Finance",  signal: "SELL", rsi: 69 },
-  { symbol: "PNB",         name: "Punjab National Bank",     price: 112.30,  change: -1.45, mktCap: "1.2L",   sector: "Finance",  signal: "SELL", rsi: 70 },
-  { symbol: "INDIANB",     name: "Indian Bank",              price: 567.80,  change: 0.34,  mktCap: "0.3L",   sector: "Finance",  signal: "HOLD", rsi: 57 },
-  { symbol: "FEDERALBNK",  name: "Federal Bank",             price: 212.40,  change: 0.89,  mktCap: "0.4L",   sector: "Finance",  signal: "BUY",  rsi: 52 },
-  { symbol: "IDFCFIRSTB",  name: "IDFC First Bank",          price: 78.90,   change: -2.34, mktCap: "0.5L",   sector: "Finance",  signal: "SELL", rsi: 74 },
-  { symbol: "PIRAMALENT",  name: "Piramal Enterprises",      price: 1234.60, change: 1.56,  mktCap: "0.3L",   sector: "Finance",  signal: "BUY",  rsi: 48 },
-  { symbol: "LICHSGFIN",   name: "LIC Housing Finance",      price: 789.40,  change: 0.67,  mktCap: "0.4L",   sector: "Finance",  signal: "BUY",  rsi: 53 },
-  { symbol: "RECLTD",      name: "REC Ltd",                  price: 567.80,  change: 2.34,  mktCap: "1.5L",   sector: "Finance",  signal: "BUY",  rsi: 46 },
-  { symbol: "PFC",         name: "Power Finance Corp",       price: 489.60,  change: 2.12,  mktCap: "1.5L",   sector: "Finance",  signal: "BUY",  rsi: 47 },
-  { symbol: "NHPC",        name: "NHPC Ltd",                 price: 98.75,   change: 1.78,  mktCap: "0.9L",   sector: "Power",    signal: "BUY",  rsi: 49 },
-  { symbol: "IRFC",        name: "Indian Railway Finance",   price: 176.40,  change: 1.45,  mktCap: "2.3L",   sector: "Finance",  signal: "BUY",  rsi: 50 },
-  { symbol: "HAL",         name: "Hindustan Aeronautics",    price: 4567.80, change: 3.45,  mktCap: "3.0L",   sector: "Defence",  signal: "BUY",  rsi: 57 },
-  { symbol: "BEL",         name: "Bharat Electronics",       price: 312.45,  change: 2.67,  mktCap: "2.3L",   sector: "Defence",  signal: "BUY",  rsi: 54 },
-  { symbol: "BHEL",        name: "Bharat Heavy Electricals", price: 289.70,  change: 1.89,  mktCap: "1.0L",   sector: "Capital",  signal: "BUY",  rsi: 52 },
-  { symbol: "ZOMATO",      name: "Zomato Ltd",               price: 267.80,  change: 3.78,  mktCap: "2.4L",   sector: "Tech",     signal: "BUY",  rsi: 61 },
-  { symbol: "NYKAA",       name: "FSN E-Commerce (Nykaa)",   price: 189.45,  change: 2.34,  mktCap: "0.5L",   sector: "Tech",     signal: "BUY",  rsi: 58 },
-  { symbol: "PAYTM",       name: "One97 Comm (Paytm)",       price: 987.60,  change: 4.56,  mktCap: "0.6L",   sector: "Tech",     signal: "BUY",  rsi: 55 },
-  { symbol: "POLICYBZR",   name: "PB Fintech (PolicyBazaar)",price: 1789.40, change: 5.12,  mktCap: "0.8L",   sector: "Tech",     signal: "BUY",  rsi: 62 },
-  { symbol: "DMART",       name: "Avenue Supermarts (DMart)",price: 4789.60, change: -0.89, mktCap: "3.1L",   sector: "Retail",   signal: "HOLD", rsi: 63 },
-  { symbol: "TRENT",       name: "Trent Ltd (Westside)",     price: 6789.30, change: 4.23,  mktCap: "2.4L",   sector: "Retail",   signal: "BUY",  rsi: 65 },
-  { symbol: "VEDL",        name: "Vedanta Ltd",              price: 478.90,  change: 2.89,  mktCap: "1.8L",   sector: "Metal",    signal: "BUY",  rsi: 43 },
-  { symbol: "SAIL",        name: "Steel Authority of India", price: 134.60,  change: 1.67,  mktCap: "0.6L",   sector: "Metal",    signal: "BUY",  rsi: 46 },
-  { symbol: "NMDC",        name: "NMDC Ltd",                 price: 234.80,  change: 1.45,  mktCap: "0.7L",   sector: "Mining",   signal: "BUY",  rsi: 50 },
-  { symbol: "GAIL",        name: "GAIL India",               price: 212.45,  change: 0.89,  mktCap: "1.4L",   sector: "Energy",   signal: "BUY",  rsi: 51 },
-  { symbol: "IOC",         name: "Indian Oil Corp",          price: 167.80,  change: 1.23,  mktCap: "2.4L",   sector: "Energy",   signal: "BUY",  rsi: 49 },
-  { symbol: "HPCL",        name: "Hindustan Petroleum",      price: 456.30,  change: 1.78,  mktCap: "0.9L",   sector: "Energy",   signal: "BUY",  rsi: 48 },
-  { symbol: "TORNTPOWER",  name: "Torrent Power",            price: 1456.80, change: 2.34,  mktCap: "0.7L",   sector: "Power",    signal: "BUY",  rsi: 52 },
-  { symbol: "ADANIGREEN",  name: "Adani Green Energy",       price: 1567.40, change: 3.12,  mktCap: "2.5L",   sector: "Power",    signal: "BUY",  rsi: 58 },
-  { symbol: "ADANIPOWER",  name: "Adani Power",              price: 678.90,  change: 2.78,  mktCap: "2.6L",   sector: "Power",    signal: "BUY",  rsi: 55 },
-  { symbol: "SUZLON",      name: "Suzlon Energy",            price: 78.45,   change: 4.56,  mktCap: "1.1L",   sector: "Power",    signal: "BUY",  rsi: 62 },
-  { symbol: "IREDA",       name: "Indian Renewable Energy",  price: 234.60,  change: 3.45,  mktCap: "0.6L",   sector: "Finance",  signal: "BUY",  rsi: 59 },
-  { symbol: "TVSMOTOR",    name: "TVS Motor Company",        price: 2567.80, change: 1.89,  mktCap: "1.2L",   sector: "Auto",     signal: "BUY",  rsi: 56 },
-  { symbol: "MOTHERSON",   name: "Motherson Sumi Systems",   price: 189.45,  change: 2.12,  mktCap: "1.3L",   sector: "Auto",     signal: "BUY",  rsi: 53 },
-  { symbol: "BALKRISIND",  name: "Balkrishna Industries",    price: 2789.60, change: 1.34,  mktCap: "0.5L",   sector: "Auto",     signal: "BUY",  rsi: 55 },
-  { symbol: "ASHOKLEY",    name: "Ashok Leyland",            price: 234.80,  change: 2.45,  mktCap: "0.7L",   sector: "Auto",     signal: "BUY",  rsi: 50 },
-  { symbol: "MFSL",        name: "Max Financial Services",   price: 1234.60, change: 0.78,  mktCap: "0.4L",   sector: "Finance",  signal: "HOLD", rsi: 56 },
 ];
+// Truncated to Top 30 to avoid excessive API calls
 
 const SECTORS = ["ALL", "Finance", "IT", "Energy", "Auto", "Pharma", "FMCG", "Metal", "Power", "Tech", "Infra", "Cement", "Defence", "Retail", "Other"];
 const TIMEFRAMES = ["1m", "5m", "15m", "1H", "4H", "1D", "1W"];
@@ -227,33 +156,36 @@ function CandleChart({ candles, color, width = SW - 40, height = 200 }) {
 }
 
 // ── STOCK DETAIL MODAL ────────────────────────────────────────
-function StockDetailModal({ stock, visible, onClose }) {
+function StockDetailModal({ stock, visible, onClose, onBuy, onSell }) {
   const [tf, setTf]     = useState("1H");
   const [candles, setCnd] = useState({});
   const [livePx, setLive] = useState(stock?.price ?? 0);
 
   useEffect(() => {
-    if (!stock) return;
-    const vol = stock.price > 5000 ? 0.008 : stock.price > 1000 ? 0.015 : 0.022;
-    const data = {};
-    TIMEFRAMES.forEach(t => { data[t] = genCandles(stock.price, 40, vol * (t === "1W" ? 4 : t === "1D" ? 2.5 : t === "4H" ? 1.8 : t === "1H" ? 1.2 : t === "15m" ? 0.8 : t === "5m" ? 0.5 : 0.3)); });
-    setCnd(data);
-    setLive(stock.price);
-  }, [stock]);
+    if (!stock || !visible) return;
+    let isMounted = true;
+    
+    const fetchChart = async () => {
+      // Map timeframe to yahoo interval/range
+      let interval = "1h", range = "1mo";
+      if (tf === "1m") { interval = "1m"; range = "1d"; }
+      else if (tf === "5m") { interval = "5m"; range = "5d"; }
+      else if (tf === "15m") { interval = "15m"; range = "5d"; }
+      else if (tf === "1H") { interval = "1h"; range = "1mo"; }
+      else if (tf === "4H") { interval = "1h"; range = "3mo"; } 
+      else if (tf === "1D") { interval = "1d"; range = "6mo"; }
+      else if (tf === "1W") { interval = "1wk"; range = "2y"; }
 
-  useEffect(() => {
-    if (!visible || !stock) return;
-    const iv = setInterval(() => {
-      setLive(p => parseFloat((p + (Math.random() - 0.49) * p * 0.001).toFixed(2)));
-      setCnd(prev => {
-        if (!prev[tf]) return prev;
-        const last = prev[tf].slice(-1)[0];
-        const nc   = last.close + (Math.random() - 0.49) * last.close * 0.002;
-        const newC = { open: last.close, close: nc, high: Math.max(last.close, nc) * 1.001, low: Math.min(last.close, nc) * 0.999, bullish: nc >= last.close };
-        return { ...prev, [tf]: [...prev[tf].slice(1), newC] };
-      });
-    }, 1000);
-    return () => clearInterval(iv);
+      const data = await getHistoricalData(stock.symbol, range, interval);
+      if (isMounted && data.length > 0) {
+        setCnd(prev => ({ ...prev, [tf]: data.slice(-40) })); // keep last 40 candles
+        setLive(data[data.length - 1].close);
+      }
+    };
+    
+    fetchChart();
+    const iv = setInterval(fetchChart, 15000); // refresh every 15s
+    return () => { isMounted = false; clearInterval(iv); };
   }, [visible, tf, stock]);
 
   if (!stock || !visible) return null;
@@ -347,7 +279,7 @@ function StockDetailModal({ stock, visible, onClose }) {
         </View>
 
         {/* 52W Range */}
-        <View style={{ marginHorizontal: 16, backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 30 }}>
+        <View style={{ marginHorizontal: 16, backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 16 }}>
           <Text style={{ fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 12 }}>52-WEEK RANGE</Text>
           <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
             <Text style={[ss.mono, { fontSize: 12, color: C.red }]}>₹{(stock.price * 0.72).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</Text>
@@ -362,13 +294,24 @@ function StockDetailModal({ stock, visible, onClose }) {
             <Text style={{ fontSize: 9, color: C.muted }}>52W High</Text>
           </View>
         </View>
+
+        {/* Trade Actions */}
+        <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 16, marginBottom: 40 }}>
+          <TouchableOpacity disabled={!livePx} onPress={() => onBuy && onBuy(stock.symbol, livePx, stock.sector)} style={{ flex: 1, backgroundColor: C.green, padding: 16, borderRadius: 12, alignItems: "center", shadowColor: C.green, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, opacity: !livePx ? 0.4 : 1 }}>
+            <Text style={{ color: "#000", fontWeight: "800", fontSize: 16 }}>BUY</Text>
+          </TouchableOpacity>
+          <TouchableOpacity disabled={!livePx} onPress={() => onSell && onSell(stock.symbol, livePx)} style={{ flex: 1, backgroundColor: C.red, padding: 16, borderRadius: 12, alignItems: "center", shadowColor: C.red, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, opacity: !livePx ? 0.4 : 1 }}>
+            <Text style={{ color: "#000", fontWeight: "800", fontSize: 16 }}>SELL</Text>
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
     </View>
   );
 }
 
 // ── MARKET TAB ────────────────────────────────────────────────
-export default function MarketTab() {
+export default function MarketTab({ onBuy, onSell }) {
   const [view, setView]         = useState("stocks"); // "stocks" | "indices"
   const [sector, setSector]     = useState("ALL");
   const [search, setSearch]     = useState("");
@@ -381,22 +324,33 @@ export default function MarketTab() {
     return p;
   });
 
-  // Live price simulation
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Live price via Yahoo Finance API
   useEffect(() => {
-    const iv = setInterval(() => {
-      setPrices(prev => {
-        const next = { ...prev };
-        NSE_TOP100.forEach(s => {
-          const vol = s.price > 5000 ? 0.0008 : s.price > 1000 ? 0.001 : 0.0015;
-          next[s.symbol] = parseFloat((prev[s.symbol] + (Math.random() - 0.49) * prev[s.symbol] * vol).toFixed(2));
+    let isMounted = true;
+    const fetchPrices = async () => {
+      setIsLoading(true);
+      const symbols = [...NSE_TOP100.map(s => s.symbol), ...NSE_INDICES.map(s => s.sym)];
+      const quotes = await getMultipleStocks(symbols);
+      if (isMounted && quotes.length > 0) {
+        setPrices(prev => {
+          const next = { ...prev };
+          quotes.forEach(q => {
+            let key = q.symbol;
+            if (key.endsWith(".NS")) key = key.replace(".NS", "");
+            if (key.endsWith("-USD")) key = key.replace("-USD", "");
+            if (NSE_INDICES.some(x => x.sym === q.symbol)) key = q.symbol;
+            next[key] = q.price ?? next[key];
+          });
+          return next;
         });
-        NSE_INDICES.forEach(s => {
-          next[s.sym] = parseFloat((prev[s.sym] + (Math.random() - 0.49) * prev[s.sym] * 0.0005).toFixed(2));
-        });
-        return next;
-      });
-    }, 1200);
-    return () => clearInterval(iv);
+      }
+      if (isMounted) setIsLoading(false);
+    };
+    fetchPrices();
+    const iv = setInterval(fetchPrices, 10000); // Poll every 10s
+    return () => { isMounted = false; clearInterval(iv); };
   }, []);
 
   const filtered = NSE_TOP100
@@ -416,6 +370,13 @@ export default function MarketTab() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Loading Indicator */}
+      {isLoading && (
+        <View style={{ padding: 4, alignItems: "center" }}>
+          <Text style={{ fontSize: 10, color: C.accent, fontWeight: "700", letterSpacing: 1 }}>FETCHING LIVE DATA...</Text>
+        </View>
+      )}
 
       {/* ── INDICES VIEW ── */}
       {view === "indices" && (
@@ -585,7 +546,7 @@ export default function MarketTab() {
 
       {/* Stock Detail Modal */}
       {selStock && (
-        <StockDetailModal stock={selStock} visible={!!selStock} onClose={() => setSelStock(null)} />
+        <StockDetailModal stock={selStock} visible={!!selStock} onClose={() => setSelStock(null)} onBuy={onBuy} onSell={onSell} />
       )}
     </View>
   );

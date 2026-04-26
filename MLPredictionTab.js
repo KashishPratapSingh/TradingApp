@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { getHistoricalData, getStockQuote } from "./apiService";
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Dimensions, Platform, ActivityIndicator,
@@ -469,76 +470,66 @@ export default function MLPredictionTab() {
     };
   }, [selectedSymbol]);
 
-  const trainModel = useCallback(() => {
+  const trainModel = useCallback(async () => {
     setIsTraining(true);
     setTrainProgress(0);
     setPrediction(null);
     clearInterval(liveIntervalRef.current);
 
-    // Simulate training progress
-    let p = 0;
-    const steps = [
-      "Fetching historical data...",
-      "Extracting features (RSI, EMA, MACD)...",
-      "Training Linear Regression model...",
-      "Training EMA Crossover model...",
-      "Training RSI Mean Reversion...",
-      "Training MACD Momentum model...",
-      "Running ensemble voting...",
-      "Calculating price targets...",
-    ];
-    let step = 0;
-    progressRef.current = setInterval(() => {
-      p += Math.random() * 15 + 8;
-      if (p >= 100) {
-        p = 100;
-        clearInterval(progressRef.current);
-      }
-      setTrainProgress(Math.min(100, Math.round(p)));
-      if (step < steps.length) {
-        setModelLog(prev => [...prev.slice(-6), `[${new Date().toLocaleTimeString()}] ${steps[step]}`]);
-        step++;
-      }
-    }, 250);
+    setModelLog([`[${new Date().toLocaleTimeString()}] Fetching historical data for ${selectedSymbol}...`]);
+    setTrainProgress(20);
 
-    // After ~2s, complete training
-    setTimeout(() => {
-      clearInterval(progressRef.current);
+    try {
+      const data = await getHistoricalData(selectedSymbol, "3mo", "1d");
+      if (!data || data.length === 0) {
+        throw new Error("No historical data returned");
+      }
+      
+      setModelLog(prev => [...prev.slice(-6), `[${new Date().toLocaleTimeString()}] Processing ML models locally...`]);
+      setTrainProgress(60);
+      
+      // Simulate slight processing delay for feel
+      await new Promise(r => setTimeout(r, 600));
+
+      const result = MLEngine.trainAndPredict(data);
+      
       setTrainProgress(100);
+      setModelLog(prev => [...prev.slice(-6), `[${new Date().toLocaleTimeString()}] ✅ Training complete. Signal: ${result.signal}`]);
 
-      const hist = generateHistoricalData(stock.basePrice, 60, stock.volatility);
-      setHistoricalData(hist);
-
-      const result = MLEngine.trainAndPredict(hist);
+      setHistoricalData(data);
       setPrediction(result);
       setLivePrice(result.currentPrice);
       setLiveHistory([result.currentPrice]);
-      setModelLog(prev => [...prev, `✅ Training complete. Signal: ${result.signal} (${result.confidence}%)`]);
 
       setIsTraining(false);
       startLiveUpdates(result.currentPrice, result);
-    }, 2200);
-  }, [selectedSymbol, stock]);
+    } catch (e) {
+      setModelLog(prev => [...prev.slice(-6), `❌ Error: ${e.message}`]);
+      setIsTraining(false);
+    }
+  }, [selectedSymbol]);
 
-  // ── Live price simulation ────────────────────────────────────
+  // ── Live price from API ────────────────────────────────────
   const startLiveUpdates = (startPrice, pred) => {
     clearInterval(liveIntervalRef.current);
     let current = startPrice;
-    liveIntervalRef.current = setInterval(() => {
-      // Price drifts slightly toward prediction
-      const drift = (pred.predictedPrice - current) * 0.005;
-      const noise = (Math.random() - 0.5) * current * stock.volatility * 0.08;
-      current = current + drift + noise;
-      setLivePrice(current);
-      setLiveHistory(h => [...h.slice(-60), current]);
-
-      // Update prediction confidence slightly
-      setPrediction(prev => {
-        if (!prev) return prev;
-        const newConf = Math.min(96, Math.max(40, prev.confidence + (Math.random() - 0.5) * 1.5));
-        return { ...prev, confidence: Math.round(newConf * 10) / 10 };
-      });
-    }, 1500);
+    liveIntervalRef.current = setInterval(async () => {
+      const quote = await getStockQuote(selectedSymbol);
+      if (quote && quote.price) {
+        current = quote.price;
+        setLivePrice(current);
+        setLiveHistory(h => [...h.slice(-60), current]);
+        
+        setPrediction(prev => {
+          if (!prev) return prev;
+          // Dynamically adjust confidence slightly based on real movement
+          const movedTowardPredicted = (current > prev.currentPrice && prev.signal === "BUY") || (current < prev.currentPrice && prev.signal === "SELL");
+          const adj = movedTowardPredicted ? 0.5 : -0.5;
+          const newConf = Math.min(96, Math.max(40, prev.confidence + adj));
+          return { ...prev, confidence: Math.round(newConf * 10) / 10 };
+        });
+      }
+    }, 10000); // 10s poll
   };
 
   const signalColor = prediction?.signal === "BUY" ? C.green : prediction?.signal === "SELL" ? C.red : C.yellow;

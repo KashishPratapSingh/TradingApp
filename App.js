@@ -4,12 +4,14 @@
 // ─────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import MarketTab from "./MarketTab";
 import MLPredictionTab from './MLPredictionTab';
+import { getMultipleStocks } from "./apiService";
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Dimensions, Modal, StatusBar,
-  KeyboardAvoidingView, Platform, SafeAreaView,
+  KeyboardAvoidingView, Platform, SafeAreaView, ActivityIndicator,
 } from "react-native";
 import Svg, {
   Path, Line, Circle, Polyline, Rect,
@@ -34,6 +36,8 @@ const C = {
   dim:     "#8AA0B8",
 };
 
+
+
 // ── DATA ──────────────────────────────────────────────────────
 const stockData = [
   { symbol: "RELIANCE",   price: 2847.35, change: 1.24,  signal: "BUY",  confidence: 87, rsi: 58, macd: "Bullish", sector: "Energy"  },
@@ -53,7 +57,7 @@ const indices = [
   { name: "NIFTY IT",   value: "38,104.25", pct: "-0.81%", pos: false },
 ];
 
-const portfolio = [
+const DEFAULT_PORTFOLIO = [
   { symbol: "RELIANCE",   qty: 10, avg: 2710, ltp: 2847.35, pnl: 1373.5,  pct: 5.07,  sector: "Energy"  },
   { symbol: "TCS",        qty: 5,  avg: 3750, ltp: 3892.15, pnl: 710.75,  pct: 3.79,  sector: "IT"      },
   { symbol: "BAJFINANCE", qty: 3,  avg: 6890, ltp: 7123.40, pnl: 700.2,   pct: 3.39,  sector: "Finance" },
@@ -213,28 +217,26 @@ function CryptoTab() {
   const [candles, setCandles]       = useState(CANDLE_DATA);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCryptoPrices(prev => ({
-        BTC: { ...prev.BTC, price: parseFloat((prev.BTC.price + (Math.random() - 0.49) * 80).toFixed(2)) },
-        ETH: { ...prev.ETH, price: parseFloat((prev.ETH.price + (Math.random() - 0.49) * 8).toFixed(2))  },
-      }));
-      setCandles(prev => {
-        const last = prev[selected][timeframe].slice(-1)[0];
-        const newClose  = last.close + (Math.random() - 0.49) * last.close * 0.003;
-        const newCandle = {
-          open: last.close, close: newClose,
-          high: Math.max(last.close, newClose) * (1 + Math.random() * 0.002),
-          low:  Math.min(last.close, newClose) * (1 - Math.random() * 0.002),
-          bullish: newClose >= last.close,
-        };
-        return {
-          ...prev,
-          [selected]: { ...prev[selected], [timeframe]: [...prev[selected][timeframe].slice(1), newCandle] },
-        };
+    let isMounted = true;
+    const fetchCrypto = async () => {
+      const quotes = await getMultipleStocks(["BTC-USD", "ETH-USD"]);
+      if (!isMounted || !quotes.length) return;
+      
+      setCryptoPrices(prev => {
+        const next = { ...prev };
+        quotes.forEach(q => {
+          const sym = q.symbol.replace("-USD", "");
+          if (next[sym]) {
+            next[sym] = { ...next[sym], price: q.price || next[sym].price, change: parseFloat((q.changePercent || 0).toFixed(2)) };
+          }
+        });
+        return next;
       });
-    }, 1200);
-    return () => clearInterval(interval);
-  }, [selected, timeframe]);
+    };
+    fetchCrypto();
+    const interval = setInterval(fetchCrypto, 10000); // Poll via Yahoo Finance
+    return () => { isMounted = false; clearInterval(interval); };
+  }, []);
 
   const coin    = cryptoPrices[selected];
   const clr     = coin.color;
@@ -360,6 +362,52 @@ function CryptoTab() {
       </View>
       <View style={{ height: 20 }} />
     </ScrollView>
+  );
+}
+
+// ── LOGIN SCREEN ──────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [user, setUser] = useState("");
+  const [pass, setPass] = useState("");
+  const [err, setErr]   = useState("");
+
+  const handleLogin = async () => {
+    if (user.toLowerCase() === "admin" && pass === "1234") {
+      setErr("");
+      await AsyncStorage.setItem("auth_token", "dummy_token");
+      onLogin();
+    } else {
+      setErr("Invalid username or password");
+    }
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: C.bg, justifyContent: "center", padding: 32 }}>
+      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
+      <View style={{ alignItems: "center", marginBottom: 40 }}>
+        <Text style={{ fontSize: 64, marginBottom: 10 }}>⚡</Text>
+        <Text style={{ fontSize: 24, fontWeight: "800", color: C.text, letterSpacing: 1 }}>ANTIGRAVITY TRADE</Text>
+        <Text style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>High Frequency Edge Dashboard</Text>
+      </View>
+      <View style={{ backgroundColor: C.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: C.border }}>
+        <Text style={[s.label, { marginBottom: 8 }]}>USERNAME</Text>
+        <TextInput 
+          value={user} onChangeText={setUser} placeholder="Enter admin" placeholderTextColor={C.dim} 
+          style={{ backgroundColor: C.surface, color: C.text, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: err ? C.red : C.border, marginBottom: 16, fontSize: 14 }}
+          autoCapitalize="none"
+        />
+        <Text style={[s.label, { marginBottom: 8 }]}>PASSWORD</Text>
+        <TextInput 
+          value={pass} onChangeText={setPass} placeholder="Enter 1234" placeholderTextColor={C.dim} secureTextEntry 
+          style={{ backgroundColor: C.surface, color: C.text, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: err ? C.red : C.border, marginBottom: 20, fontSize: 14 }}
+        />
+        {err ? <Text style={{ color: C.red, fontSize: 12, marginBottom: 20, textAlign: "center", fontWeight: "600" }}>{err}</Text> : null}
+        
+        <TouchableOpacity onPress={handleLogin} style={{ backgroundColor: C.accent, padding: 16, borderRadius: 10, alignItems: "center", shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
+          <Text style={{ color: "#000", fontWeight: "800", fontSize: 15, letterSpacing: 1 }}>SECURE LOGIN</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -573,18 +621,36 @@ function ScreenerTab() {
 }
 
 // ── PORTFOLIO TAB ─────────────────────────────────────────────
-function PortfolioTab() {
-  const totalPnl   = portfolio.reduce((a, s) => a + s.pnl, 0);
+function PortfolioTab({ portfolio, onSell }) {
+  const totalInvestment = portfolio.reduce((a, s) => a + s.qty * s.avg, 0);
   const totalValue = portfolio.reduce((a, s) => a + s.qty * s.ltp, 0);
+  const totalPnl   = totalValue - totalInvestment;
+  const totalPct   = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
+  
   const sectors = {};
   portfolio.forEach(s => { sectors[s.sector] = (sectors[s.sector] || 0) + s.qty * s.ltp; });
   const sectorColors = [C.accent, C.purple, C.green, C.yellow];
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16 }}>
-      <View style={[s.card, { padding: 18, marginBottom: 16, borderColor: totalPnl > 0 ? C.green + "30" : C.red + "30" }]}>
-        <Text style={s.label}>PORTFOLIO VALUE</Text>
-        <Text style={[s.mono, { fontSize: 28, fontWeight: "800", color: C.text, marginTop: 2 }]}>₹{totalValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</Text>
-        <Text style={{ fontSize: 14, color: totalPnl > 0 ? C.green : C.red, marginTop: 4 }}>{totalPnl > 0 ? "▲" : "▼"} ₹{Math.abs(totalPnl).toLocaleString()} P&L</Text>
+      <View style={[s.card, { padding: 18, marginBottom: 16, borderColor: totalPnl >= 0 ? C.green + "30" : C.red + "30", backgroundColor: totalPnl >= 0 ? C.green + "05" : C.red + "05" }]}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <View>
+            <Text style={s.label}>CURRENT VALUE</Text>
+            <Text style={[s.mono, { fontSize: 28, fontWeight: "800", color: C.text, marginTop: 2 }]}>₹{totalValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</Text>
+          </View>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={s.label}>INVESTED</Text>
+            <Text style={[s.mono, { fontSize: 16, fontWeight: "600", color: C.muted, marginTop: 2 }]}>₹{totalInvestment.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</Text>
+          </View>
+        </View>
+        
+        <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: C.border, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={{ fontSize: 13, color: C.muted }}>Total Profit & Loss</Text>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={[s.mono, { fontSize: 18, fontWeight: "700", color: totalPnl >= 0 ? C.green : C.red }]}>{totalPnl >= 0 ? "+" : "-"}₹{Math.abs(totalPnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</Text>
+            <Text style={{ fontSize: 12, color: totalPnl >= 0 ? C.green : C.red, fontWeight: "600" }}>{totalPct >= 0 ? "▲" : "▼"} {Math.abs(totalPct).toFixed(2)}%</Text>
+          </View>
+        </View>
       </View>
       <View style={[s.card, { padding: 14, marginBottom: 16 }]}>
         <Text style={[s.label, { marginBottom: 12 }]}>SECTOR ALLOCATION</Text>
@@ -608,9 +674,14 @@ function PortfolioTab() {
               <Text style={{ fontSize: 13, fontWeight: "700", color: C.text }}>{stock.symbol}</Text>
               <Text style={{ fontSize: 10, color: C.muted }}>{stock.qty} shares · Avg ₹{stock.avg}</Text>
             </View>
-            <View style={{ alignItems: "flex-end" }}>
-              <Text style={{ fontSize: 13, color: C.text }}>₹{(stock.qty * stock.ltp).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</Text>
-              <Text style={{ fontSize: 11, color: stock.pnl > 0 ? C.green : C.red }}>{stock.pnl > 0 ? "+" : ""}₹{stock.pnl.toFixed(0)} ({stock.pct > 0 ? "+" : ""}{stock.pct}%)</Text>
+            <View style={{ alignItems: "flex-end", flexDirection: "row", gap: 10 }}>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={{ fontSize: 13, color: C.text }}>₹{(stock.qty * stock.ltp).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</Text>
+                <Text style={{ fontSize: 11, color: stock.pnl > 0 ? C.green : C.red }}>{stock.pnl > 0 ? "+" : ""}₹{stock.pnl.toFixed(0)} ({stock.pct > 0 ? "+" : ""}{stock.pct}%)</Text>
+              </View>
+              <TouchableOpacity onPress={() => onSell && onSell(stock.symbol, stock.ltp)} style={{ backgroundColor: C.red + "15", borderWidth: 1, borderColor: C.red + "30", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, justifyContent: "center" }}>
+                <Text style={{ fontSize: 10, fontWeight: "700", color: C.red }}>SELL</Text>
+              </TouchableOpacity>
             </View>
           </View>
           <View style={{ height: 3, backgroundColor: C.border, borderRadius: 2 }}>
@@ -1343,20 +1414,115 @@ function IndicatorsTab() {
 // ── TABS ──────────────────────────────────────────────────────
 const TABS = [
   { id: "home",       label: "Home",    icon: "⬡" },
+  { id: "portfolio",  label: "Holdings",icon: "💼"},
   { id: "market",     label: "Market",  icon: "📈" },
   { id: "crypto",     label: "Crypto",  icon: "₿"  },
   { id: "indicators", label: "Signals", icon: "◈" },
   { id: "risk",       label: "Risk",    icon: "⚡" },
   { id: "live",       label: "Live",    icon: "◉" },
-  { id: "mlpredict", label: "AI Pred", icon: "🧠" },
+  { id: "mlpredict",  label: "AI Pred", icon: "🧠" },
 ];
 
 // ── ROOT ──────────────────────────────────────────────────────
 export default function App() {
+  const [appLoaded, setAppLoaded] = useState(false);
+  const [apiFailed, setApiFailed] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState("home");
   const [showAI, setShowAI]       = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [userName, setUserName]   = useState("admin");
   const [aiMsg, setAiMsg]         = useState("");
   const [aiChat, setAiChat]       = useState([{ from: "ai", text: "Namaste! Ask me about BTC, ETH, or Indian stocks — signals, charts, risk." }]);
+  const [portfolioState, setPortfolioState] = useState(DEFAULT_PORTFOLIO);
+  const [toast, setToast]         = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkLoginInfo = async () => {
+      const token = await AsyncStorage.getItem("auth_token");
+      if (token === "dummy_token" && isMounted) setIsAuthenticated(true);
+      if (isMounted) setCheckingAuth(false);
+    };
+    checkLoginInfo();
+
+    const initApp = async () => {
+      const symbols = stockData.map(s => s.symbol);
+      const quotes = await getMultipleStocks(symbols);
+      if (!isMounted) return;
+      if (quotes.length) {
+        quotes.forEach(q => {
+          const sym = q.symbol.replace(".NS", "");
+          const sd = stockData.find(s => s.symbol === sym);
+          if (sd) {
+             sd.price = q.price || sd.price;
+             sd.change = q.changePercent ? parseFloat(q.changePercent.toFixed(2)) : sd.change;
+          }
+        });
+        
+        // Update live prices in portfolio state
+        setPortfolioState(prev => prev.map(pItem => {
+          const matched = quotes.find(q => q.symbol.replace(".NS", "") === pItem.symbol || q.symbol.replace("-USD", "") === pItem.symbol);
+          if (matched && matched.price) {
+            const newLtp = matched.price;
+            const pnl = (newLtp - pItem.avg) * pItem.qty;
+            const pct = (newLtp - pItem.avg) / pItem.avg * 100;
+            return { ...pItem, ltp: newLtp, pnl, pct: parseFloat(pct.toFixed(2)) };
+          }
+          return pItem;
+        }));
+        
+        setApiFailed(false);
+        setAppLoaded(true);
+      } else {
+        // Fallback gracefully to default data if network strictly fails completely
+        setApiFailed(true);
+        setAppLoaded(true);
+      }
+    };
+    initApp();
+    const intervalId = setInterval(initApp, 10000);
+    return () => { isMounted = false; clearInterval(intervalId); };
+  }, []);
+
+  const showToast = (msg, color = C.green) => {
+    setToast({ msg, color });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const onBuy = (symbol, price, sector = "Unknown") => {
+    if (!price) return;
+    setPortfolioState(prev => {
+      const exist = prev.find(p => p.symbol === symbol);
+      if (exist) {
+        const newQty = exist.qty + 1;
+        const newTotalCost = (exist.qty * exist.avg) + price;
+        const newAvg = newTotalCost / newQty;
+        const newPnl = (price - newAvg) * newQty;
+        const newPct = ((price - newAvg) / newAvg) * 100;
+        return prev.map(p => p.symbol === symbol ? { ...p, qty: newQty, avg: newAvg, ltp: price, pnl: newPnl, pct: parseFloat(newPct.toFixed(2)) } : p);
+      }
+      return [...prev, { symbol, qty: 1, avg: price, ltp: price, pnl: 0, pct: 0, sector }];
+    });
+    showToast(`✓ Purchased 1 ${symbol}`);
+  };
+
+  const onSell = (symbol, price) => {
+    if (!price) return;
+    setPortfolioState(prev => {
+      const exist = prev.find(p => p.symbol === symbol);
+      if (!exist) return prev;
+      if (exist.qty <= 1) {
+        return prev.filter(p => p.symbol !== symbol);
+      }
+      const newQty = exist.qty - 1;
+      const newPnl = (price - exist.avg) * newQty;
+      const newPct = ((price - exist.avg) / exist.avg) * 100;
+      return prev.map(p => p.symbol === symbol ? { ...p, qty: newQty, ltp: price, pnl: newPnl, pct: parseFloat(newPct.toFixed(2)) } : p);
+    });
+    showToast(`✓ Sold 1 ${symbol}`, C.orange);
+  };
 
   const sendAiMsg = () => {
     if (!aiMsg.trim()) return;
@@ -1370,31 +1536,61 @@ export default function App() {
   const renderContent = () => {
     switch (activeTab) {
       case "home":       return <HomeTab />;
-      case "market":     return <MarketTab />;
+      case "portfolio":  return <PortfolioTab portfolio={portfolioState} onSell={onSell} />;
+      case "market":     return <MarketTab onBuy={onBuy} onSell={onSell} />;
       case "crypto":     return <CryptoTab />;
       case "indicators": return <IndicatorsTab />;
       case "risk":       return <RiskTab />;
       case "live":       return <LiveTab />;
-      case "mlpredict": return <MLPredictionTab />;
+      case "mlpredict":  return <MLPredictionTab />;
     }
   };
 
+  if (checkingAuth || !appLoaded) {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.bg, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color={C.accent} />
+        <Text style={{ fontSize: 13, color: C.accent, marginTop: 16, fontWeight: "700", letterSpacing: 1 }}>{checkingAuth ? "CHECKING SESSION..." : "CONNECTING TO MARKET DATA..."}</Text>
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen onLogin={() => {
+      setIsAuthenticated(true);
+      showToast(`Welcome back, admin! 👋`, C.accent);
+    }} />;
+  }
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
-      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }}>
+      <StatusBar barStyle="light-content" backgroundColor={C.bg} translucent={true} />
+
+      {apiFailed && (
+        <View style={{ backgroundColor: C.red + "20", padding: 8, alignItems: "center", borderBottomWidth: 1, borderBottomColor: C.red + "50" }}>
+          <Text style={{ color: C.red, fontSize: 10, fontWeight: "700", letterSpacing: 0.5 }}>⚠️ LIVE FETCH FAILED. USING CACHED DATA.</Text>
+        </View>
+      )}
 
       {/* Header */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <View>
-          <Text style={{ fontSize: 11, color: C.muted }}>Good morning, Ganesh 👋</Text>
+      <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <TouchableOpacity onPress={() => setShowProfile(true)}>
+          <Text style={{ fontSize: 11, color: C.muted }}>Good morning, {userName} 👋</Text>
           <Text style={{ fontSize: 18, fontWeight: "800", color: C.text, letterSpacing: -0.5 }}>{TABS.find(t => t.id === activeTab)?.label}</Text>
-        </View>
-        <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ fontSize: 14, fontWeight: "700", color: "#000" }}>G</Text>
-        </View>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setShowProfile(true)} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ fontSize: 14, fontWeight: "700", color: "#000" }}>{userName ? userName.charAt(0).toUpperCase() : "U"}</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={{ flex: 1 }}>{renderContent()}</View>
+
+      {/* Floating Toast */}
+      {toast && (
+        <View style={{ position: "absolute", top: 100, alignSelf: "center", backgroundColor: C.card, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 30, borderWidth: 1, borderColor: toast.color, zIndex: 9999, shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 10 }}>
+          <Text style={{ color: toast.color, fontSize: 13, fontWeight: "700" }}>{toast.msg}</Text>
+        </View>
+      )}
 
       {/* AI FAB */}
       <TouchableOpacity onPress={() => setShowAI(true)} style={{ position: "absolute", bottom: 90, right: 16, width: 48, height: 48, borderRadius: 24, backgroundColor: C.accent, alignItems: "center", justifyContent: "center", shadowColor: C.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 12, elevation: 8 }}>
@@ -1448,6 +1644,23 @@ export default function App() {
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Profile Modal */}
+      <Modal visible={showProfile} transparent animationType="fade" onRequestClose={() => setShowProfile(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+          <TouchableOpacity style={{ flex: 1, backgroundColor: "#000000CC", alignItems: "center", justifyContent: "center" }} activeOpacity={1} onPress={() => setShowProfile(false)}>
+            <TouchableOpacity activeOpacity={1} style={{ width: "80%", backgroundColor: C.surface, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: C.border }}>
+              <Text style={{ fontSize: 16, fontWeight: "700", color: C.text, marginBottom: 12 }}>Edit Profile</Text>
+              <Text style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Enter your name</Text>
+              <TextInput value={userName} onChangeText={setUserName} placeholder="E.g. Ganesh, Sarah..." placeholderTextColor={C.muted} style={{ backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, color: C.text, fontSize: 14, marginBottom: 16 }} />
+              <TouchableOpacity onPress={() => setShowProfile(false)} style={{ backgroundColor: C.accent, borderRadius: 10, paddingVertical: 12, alignItems: "center" }}>
+                <Text style={{ color: "#000", fontWeight: "700", fontSize: 14 }}>Save Profile</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
     </SafeAreaView>
   );
 }
