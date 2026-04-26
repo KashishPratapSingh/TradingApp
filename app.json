@@ -9,6 +9,14 @@
     ],
     "ios": {
       "supportsTabletMode": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "23a1a464-858b-4335-9abe-ba8f8f273088"
+      }
+    },
+    "android": {
+      "package": "com.shashank_singh_2111.tradingapp"
     }
   }
 }
