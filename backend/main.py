@@ -21,7 +21,7 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "version": "v2-simulated-fallback"}
+    return {"status": "ok", "version": "v3-diagnostics"}
 
 SYMBOL_MAP = {
     "BTC": "BTC-USD",
@@ -346,14 +346,13 @@ def get_multiple_quotes(symbols: str):
     try:
         sym_list = symbols.split(",")
         result = []
+        logs = []
         for sym in sym_list:
             try:
-                # Get latest daily data to extract quote info
                 df = fetch_stock_data(sym, period="5d", interval="1d")
                 if df.empty:
+                    logs.append(f"{sym}: dataframe empty")
                     continue
-                if df.columns.nlevels > 1:
-                    df.columns = df.columns.droplevel(1)
                 
                 last_row = df.iloc[-1]
                 prev_row = df.iloc[-2] if len(df) > 1 else last_row
@@ -361,7 +360,6 @@ def get_multiple_quotes(symbols: str):
                 last_price = float(last_row['Close'])
                 prev_close = float(prev_row['Close'])
                 
-                # Check for NaN and handle
                 if np.isnan(last_price) or last_price == 0:
                     last_price = float(last_row['Open']) if not np.isnan(last_row['Open']) else 0
                 
@@ -375,13 +373,19 @@ def get_multiple_quotes(symbols: str):
                         "regularMarketChange": change,
                         "regularMarketChangePercent": change_pct
                     })
+                else:
+                    logs.append(f"{sym}: last_price is 0")
             except Exception as inner_e:
-                print(f"Error on symbol {sym}: {inner_e}")
+                logs.append(f"{sym}: error {str(inner_e)}")
                 
-        return {"quoteResponse": {"result": result}}
+        return {
+            "quoteResponse": {
+                "result": result, 
+                "diagnostics": logs if not result else "ok"
+            }
+        }
     except Exception as e:
-        print(f"Error fetching quotes: {e}")
-        return {"quoteResponse": {"result": []}}
+        return {"quoteResponse": {"result": [], "error": str(e)}}
 
 @app.get("/api/chart/{symbol}")
 def get_historical_data(symbol: str, range: str = "3mo", interval: str = "1d"):
