@@ -19,6 +19,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "version": "v2-simulated-fallback"}
+
 SYMBOL_MAP = {
     "BTC": "BTC-USD",
     "ETH": "ETH-USD",
