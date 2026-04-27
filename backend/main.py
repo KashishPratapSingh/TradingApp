@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import os
+from dotenv import load_dotenv
+
+# Load .env file
+load_dotenv()
 
 app = FastAPI()
 
@@ -30,6 +35,28 @@ SYMBOL_MAP = {
     "SUNPHARMA": "SUNPHARMA.NS",
     "NTPC": "NTPC.NS"
 }
+
+# Add a robust way to fetch data that works better on cloud platforms
+import requests
+from requests import Session
+
+session = Session()
+session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+})
+
+def fetch_stock_data(ticker, period="6mo", interval="1d"):
+    try:
+        # Use session and custom headers to bypass simple cloud blocks
+        data = yf.download(ticker, period=period, interval=interval, progress=False, session=session)
+        if data.empty:
+            # Fallback: Try with Ticker object which sometimes uses different internal endpoints
+            t = yf.Ticker(ticker, session=session)
+            data = t.history(period=period, interval=interval)
+        return data
+    except Exception as e:
+        print(f"Fetch failed for {ticker}: {e}")
+        return pd.DataFrame()
 
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -270,7 +297,7 @@ def get_prediction(symbol: str):
         
     try:
         # Avoid multi-level columns if pandas/yfinance acts weird by returning single df
-        df = yf.download(ticker, period="6mo", interval="1d", progress=False)
+        df = fetch_stock_data(ticker, period="6mo", interval="1d")
         
         if df.columns.nlevels > 1:
             # Flatten multi index columns like (Close, RELIANCE.NS)
@@ -296,7 +323,7 @@ def get_multiple_quotes(symbols: str):
         for sym in sym_list:
             try:
                 # Get latest daily data to extract quote info
-                df = yf.download(sym, period="5d", interval="1d", progress=False)
+                df = fetch_stock_data(sym, period="5d", interval="1d")
                 if df.empty:
                     continue
                 if df.columns.nlevels > 1:
@@ -327,7 +354,7 @@ def get_multiple_quotes(symbols: str):
 @app.get("/api/chart/{symbol}")
 def get_historical_data(symbol: str, range: str = "3mo", interval: str = "1d"):
     try:
-        df = yf.download(symbol, period=range, interval=interval, progress=False)
+        df = fetch_stock_data(symbol, period=range, interval=interval)
         if df.columns.nlevels > 1:
             df.columns = df.columns.droplevel(1)
             

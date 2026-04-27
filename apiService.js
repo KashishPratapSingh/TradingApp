@@ -1,5 +1,6 @@
-export const QUOTE_URL = "http://172.21.132.116:8000/api/quotes";
-export const CHART_URL = "http://172.21.132.116:8000/api/chart";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://trading-backend-14u5.onrender.com";
+export const QUOTE_URL = `${API_BASE_URL}/api/quotes`;
+export const CHART_URL = `${API_BASE_URL}/api/chart`;
 
 const CRYPTO_SYMBOLS = ["BTC", "ETH", "USDT", "BNB", "XRP", "SOL", "ADA"];
 const INDICES_MAPPING = {
