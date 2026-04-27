@@ -21,7 +21,7 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "version": "v3-diagnostics"}
+    return {"status": "ok", "version": "v4-force-simulated"}
 
 SYMBOL_MAP = {
     "BTC": "BTC-USD",
@@ -51,22 +51,21 @@ session.headers.update({
 
 def fetch_stock_data(ticker, period="6mo", interval="1d"):
     try:
-        # Use session and custom headers to bypass simple cloud blocks
+        # Try real fetch
         data = yf.download(ticker, period=period, interval=interval, progress=False, session=session)
-        
         if data.empty:
-            # Fallback 1: Try with Ticker object
             t = yf.Ticker(ticker, session=session)
             data = t.history(period=period, interval=interval)
-            
+        
         if not data.empty:
-            # Fix for MultiIndex columns that yfinance sometimes returns
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
             return data
-            
-        # Fallback 2: Simulated Data (so the app doesn't show 0)
-        print(f"Using simulated data for {ticker}")
+    except Exception as e:
+        print(f"Real fetch failed for {ticker}: {e}")
+
+    # FORCE SIMULATED DATA if real fetch fails or errors out
+    try:
         dates = pd.date_range(end=pd.Timestamp.now(), periods=100)
         base_price = 1000.0
         if ".NS" in ticker: base_price = 2500.0
@@ -80,8 +79,7 @@ def fetch_stock_data(ticker, period="6mo", interval="1d"):
             'Volume': 1000000
         }, index=dates)
         return sim_data
-    except Exception as e:
-        print(f"Fetch failed for {ticker}: {e}")
+    except:
         return pd.DataFrame()
 
 def calculate_rsi(series, period=14):
