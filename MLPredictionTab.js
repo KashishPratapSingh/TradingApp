@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { getHistoricalData, getStockQuote } from "./apiService";
+import { getPrediction, getStockQuote } from "./apiService";
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Dimensions, Platform, ActivityIndicator,
@@ -38,258 +38,6 @@ const C = {
   dim:     "#8AA0B8",
 };
 
-// ── HISTORICAL DATA (Past 60 days simulated) ──────────────────
-function generateHistoricalData(basePrice, days = 60, volatility = 0.018) {
-  const data = [];
-  let price = basePrice;
-  const now = Date.now();
-  for (let i = days; i >= 0; i--) {
-    const trend = Math.sin(i / 10) * 0.003; // mild sinusoidal trend
-    const noise = (Math.random() - 0.49) * volatility;
-    price = price * (1 + trend + noise);
-    const open   = price;
-    const close  = price * (1 + (Math.random() - 0.5) * 0.008);
-    const high   = Math.max(open, close) * (1 + Math.random() * 0.004);
-    const low    = Math.min(open, close) * (1 - Math.random() * 0.004);
-    const volume = Math.floor(500000 + Math.random() * 2000000);
-    data.push({
-      timestamp: now - i * 86400000,
-      open, high, low, close, volume,
-      day: i,
-    });
-    price = close;
-  }
-  return data;
-}
-
-// ── STOCK UNIVERSE (from App.js + MarketTab.js) ───────────────
-const STOCK_UNIVERSE = [
-  { symbol: "RELIANCE",   name: "Reliance Industries", basePrice: 2847.35, sector: "Energy",   volatility: 0.016 },
-  { symbol: "TCS",        name: "Tata Consultancy",    basePrice: 3892.15, sector: "IT",       volatility: 0.014 },
-  { symbol: "HDFCBANK",   name: "HDFC Bank",           basePrice: 1889.40, sector: "Finance",  volatility: 0.013 },
-  { symbol: "ICICIBANK",  name: "ICICI Bank",          basePrice: 1289.55, sector: "Finance",  volatility: 0.015 },
-  { symbol: "INFOSYS",    name: "Infosys Ltd",         basePrice: 1423.60, sector: "IT",       volatility: 0.017 },
-  { symbol: "BAJFINANCE", name: "Bajaj Finance",       basePrice: 7123.40, sector: "Finance",  volatility: 0.022 },
-  { symbol: "WIPRO",      name: "Wipro Ltd",           basePrice: 456.25,  sector: "IT",       volatility: 0.019 },
-  { symbol: "TATAMOTORS", name: "Tata Motors",         basePrice: 978.45,  sector: "Auto",     volatility: 0.025 },
-  { symbol: "SBIN",       name: "State Bank India",    basePrice: 812.70,  sector: "Finance",  volatility: 0.018 },
-  { symbol: "MARUTI",     name: "Maruti Suzuki",       basePrice: 12847.5, sector: "Auto",     volatility: 0.016 },
-  { symbol: "SUNPHARMA",  name: "Sun Pharma",          basePrice: 1789.30, sector: "Pharma",   volatility: 0.015 },
-  { symbol: "NTPC",       name: "NTPC Ltd",            basePrice: 387.45,  sector: "Power",    volatility: 0.014 },
-  { symbol: "BTC",        name: "Bitcoin",             basePrice: 83240.0, sector: "Crypto",   volatility: 0.035 },
-  { symbol: "ETH",        name: "Ethereum",            basePrice: 1587.20, sector: "Crypto",   volatility: 0.038 },
-];
-
-// ─────────────────────────────────────────────────────────────
-//  ML ENGINE
-//  Implements 4 models:
-//    1. Linear Regression (least squares on closing prices)
-//    2. Exponential Moving Average (EMA crossover)
-//    3. RSI-based Mean Reversion
-//    4. MACD Momentum
-//  Final prediction = weighted ensemble of all 4
-// ─────────────────────────────────────────────────────────────
-
-class MLEngine {
-  // ── Feature Extraction ──────────────────────────────────────
-  static extractFeatures(data) {
-    const closes = data.map(d => d.close);
-    const highs  = data.map(d => d.high);
-    const lows   = data.map(d => d.low);
-    const vols   = data.map(d => d.volume);
-    const n      = closes.length;
-
-    // SMA
-    const sma = (arr, p) => {
-      const slice = arr.slice(-p);
-      return slice.reduce((a, b) => a + b, 0) / slice.length;
-    };
-
-    // EMA
-    const ema = (arr, p) => {
-      const k = 2 / (p + 1);
-      let e   = arr[0];
-      for (let i = 1; i < arr.length; i++) e = arr[i] * k + e * (1 - k);
-      return e;
-    };
-
-    // RSI
-    const rsi = (arr, p = 14) => {
-      const slice = arr.slice(-p - 1);
-      let gains = 0, losses = 0;
-      for (let i = 1; i < slice.length; i++) {
-        const diff = slice[i] - slice[i - 1];
-        if (diff > 0) gains += diff; else losses -= diff;
-      }
-      const rs = gains / (losses || 0.001);
-      return 100 - 100 / (1 + rs);
-    };
-
-    // MACD
-    const ema12 = ema(closes, 12);
-    const ema26 = ema(closes, 26);
-    const macdLine = ema12 - ema26;
-
-    // Bollinger Bands
-    const sma20val = sma(closes, 20);
-    const variance = closes.slice(-20).reduce((s, v) => s + Math.pow(v - sma20val, 2), 0) / 20;
-    const stdDev   = Math.sqrt(variance);
-    const bbUpper  = sma20val + 2 * stdDev;
-    const bbLower  = sma20val - 2 * stdDev;
-
-    // Average True Range (ATR)
-    let atr = 0;
-    for (let i = Math.max(1, n - 14); i < n; i++) {
-      atr += Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]));
-    }
-    atr /= Math.min(14, n - 1);
-
-    // Volume trend
-    const avgVol = sma(vols, 10);
-    const volRatio = vols[n - 1] / (avgVol || 1);
-
-    return {
-      lastClose:  closes[n - 1],
-      sma5:       sma(closes, 5),
-      sma10:      sma(closes, 10),
-      sma20:      sma(closes, 20),
-      ema9:       ema(closes, 9),
-      ema21:      ema(closes, 21),
-      rsi14:      rsi(closes, 14),
-      macdLine,
-      bbUpper, bbLower, bbMid: sma20val,
-      atr,
-      volRatio,
-      closes,
-    };
-  }
-
-  // ── Model 1: Linear Regression ──────────────────────────────
-  static linearRegressionPredict(closes, horizon = 5) {
-    const n = Math.min(30, closes.length);
-    const slice = closes.slice(-n);
-    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-    for (let i = 0; i < n; i++) {
-      sumX  += i;
-      sumY  += slice[i];
-      sumXY += i * slice[i];
-      sumX2 += i * i;
-    }
-    const slope     = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
-    const predicted = intercept + slope * (n - 1 + horizon);
-    const r2        = this._rSquared(slice, slope, intercept);
-    return { predicted, slope, confidence: Math.min(95, r2 * 100) };
-  }
-
-  static _rSquared(data, slope, intercept) {
-    const mean = data.reduce((a, b) => a + b, 0) / data.length;
-    let ssTot = 0, ssRes = 0;
-    data.forEach((y, i) => {
-      ssTot += Math.pow(y - mean, 2);
-      ssRes += Math.pow(y - (intercept + slope * i), 2);
-    });
-    return Math.max(0, 1 - ssRes / (ssTot || 1));
-  }
-
-  // ── Model 2: EMA Crossover ───────────────────────────────────
-  static emaCrossoverSignal(features) {
-    const { ema9, ema21, lastClose, sma20 } = features;
-    const crossBullish = ema9 > ema21;
-    const aboveSMA     = lastClose > sma20;
-    const strength     = Math.abs(ema9 - ema21) / ema21 * 100;
-    const signal       = crossBullish && aboveSMA ? "BUY" : !crossBullish && !aboveSMA ? "SELL" : "HOLD";
-    const confidence   = Math.min(90, 50 + strength * 10);
-    const priceFactor  = crossBullish ? 1 + strength * 0.01 : 1 - strength * 0.01;
-    return { predicted: lastClose * priceFactor, signal, confidence };
-  }
-
-  // ── Model 3: RSI Mean Reversion ──────────────────────────────
-  static rsiMeanReversion(features) {
-    const { rsi14, lastClose, bbUpper, bbLower, bbMid } = features;
-    let signal = "HOLD", confidence = 50, priceFactor = 1;
-    if (rsi14 < 30) {
-      signal      = "BUY";
-      confidence  = Math.min(92, 70 + (30 - rsi14) * 1.5);
-      priceFactor = 1 + (bbMid - lastClose) / lastClose * 0.6;
-    } else if (rsi14 > 70) {
-      signal      = "SELL";
-      confidence  = Math.min(92, 70 + (rsi14 - 70) * 1.5);
-      priceFactor = 1 - (lastClose - bbMid) / lastClose * 0.6;
-    } else {
-      const bPct  = (lastClose - bbLower) / (bbUpper - bbLower);
-      priceFactor = bPct < 0.3 ? 1.005 : bPct > 0.7 ? 0.995 : 1.0;
-      confidence  = 45 + Math.abs(50 - rsi14);
-    }
-    return { predicted: lastClose * priceFactor, signal, confidence };
-  }
-
-  // ── Model 4: MACD Momentum ────────────────────────────────────
-  static macdMomentum(features) {
-    const { macdLine, lastClose, volRatio } = features;
-    const macdPct    = macdLine / lastClose * 100;
-    const volBoost   = volRatio > 1.5 ? 1.3 : volRatio < 0.7 ? 0.8 : 1.0;
-    const signal     = macdPct > 0.05 ? "BUY" : macdPct < -0.05 ? "SELL" : "HOLD";
-    const confidence = Math.min(88, 55 + Math.abs(macdPct) * 500 * volBoost);
-    const priceFactor= 1 + macdPct * 0.15 * volBoost;
-    return { predicted: lastClose * priceFactor, signal, confidence };
-  }
-
-  // ── Ensemble: Weighted Voting ─────────────────────────────────
-  static ensemble(features) {
-    const lr   = this.linearRegressionPredict(features.closes, 5);
-    const ema  = this.emaCrossoverSignal(features);
-    const rsi  = this.rsiMeanReversion(features);
-    const macd = this.macdMomentum(features);
-
-    // Weights based on market conditions
-    const trending = Math.abs(features.macdLine / features.lastClose) > 0.001;
-    const w = trending
-      ? { lr: 0.20, ema: 0.35, rsi: 0.15, macd: 0.30 }
-      : { lr: 0.25, ema: 0.20, rsi: 0.35, macd: 0.20 };
-
-    const predPrice =
-      lr.predicted   * w.lr +
-      ema.predicted  * w.ema +
-      rsi.predicted  * w.rsi +
-      macd.predicted * w.macd;
-
-    // Signal voting
-    const votes = { BUY: 0, SELL: 0, HOLD: 0 };
-    [[lr, w.lr], [ema, w.ema], [rsi, w.rsi], [macd, w.macd]].forEach(([m, wt]) => {
-      const sig = m.signal || (predPrice > features.lastClose ? "BUY" : predPrice < features.lastClose ? "SELL" : "HOLD");
-      votes[sig] += wt * (m.confidence / 100);
-    });
-    const signal   = Object.entries(votes).sort((a, b) => b[1] - a[1])[0][0];
-    const confidence = Math.min(96, Math.round(
-      (lr.confidence * w.lr + ema.confidence * w.ema + rsi.confidence * w.rsi + macd.confidence * w.macd)
-    ));
-
-    const change   = ((predPrice - features.lastClose) / features.lastClose) * 100;
-    const targets  = {
-      t1: features.lastClose * (1 + features.atr / features.lastClose),
-      t2: features.lastClose * (1 + features.atr * 2 / features.lastClose),
-      sl: features.lastClose * (1 - features.atr * 1.2 / features.lastClose),
-    };
-
-    return {
-      currentPrice: features.lastClose,
-      predictedPrice: predPrice,
-      predictedChange: change,
-      signal,
-      confidence,
-      targets,
-      models: { lr, ema, rsi, macd },
-      features,
-    };
-  }
-
-  // ── Main Train + Predict ──────────────────────────────────────
-  static trainAndPredict(historicalData) {
-    const features = this.extractFeatures(historicalData);
-    return this.ensemble(features);
-  }
-}
 
 // ─────────────────────────────────────────────────────────────
 //  UI COMPONENTS
@@ -476,27 +224,21 @@ export default function MLPredictionTab() {
     setPrediction(null);
     clearInterval(liveIntervalRef.current);
 
-    setModelLog([`[${new Date().toLocaleTimeString()}] Fetching historical data for ${selectedSymbol}...`]);
-    setTrainProgress(20);
+    setModelLog([`[${new Date().toLocaleTimeString()}] Requesting ML prediction from backend for ${selectedSymbol}...`]);
+    setTrainProgress(40);
 
     try {
-      const data = await getHistoricalData(selectedSymbol, "3mo", "1d");
-      if (!data || data.length === 0) {
-        throw new Error("No historical data returned");
+      const result = await getPrediction(selectedSymbol);
+      if (!result || !result.historicalData) {
+        throw new Error("Failed to fetch prediction from backend");
       }
       
-      setModelLog(prev => [...prev.slice(-6), `[${new Date().toLocaleTimeString()}] Processing ML models locally...`]);
-      setTrainProgress(60);
-      
-      // Simulate slight processing delay for feel
-      await new Promise(r => setTimeout(r, 600));
-
-      const result = MLEngine.trainAndPredict(data);
-      
+      setModelLog(prev => [...prev.slice(-6), `[${new Date().toLocaleTimeString()}] ✅ Prediction received. Signal: ${result.signal}`]);
       setTrainProgress(100);
-      setModelLog(prev => [...prev.slice(-6), `[${new Date().toLocaleTimeString()}] ✅ Training complete. Signal: ${result.signal}`]);
 
-      setHistoricalData(data);
+      // Map backend historical chart to include 'bullish' property
+      const histData = result.historicalData.map(d => ({...d, bullish: d.close >= d.open}));
+      setHistoricalData(histData);
       setPrediction(result);
       setLivePrice(result.currentPrice);
       setLiveHistory([result.currentPrice]);

@@ -1,6 +1,7 @@
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://trading-backend-14u5.onrender.com";
 export const QUOTE_URL = `${API_BASE_URL}/api/quotes`;
 export const CHART_URL = `${API_BASE_URL}/api/chart`;
+export const PREDICT_URL = `${API_BASE_URL}/api/predict`;
 
 const CRYPTO_SYMBOLS = ["BTC", "ETH", "USDT", "BNB", "XRP", "SOL", "ADA"];
 const INDICES_MAPPING = {
@@ -157,5 +158,22 @@ export async function getHistoricalData(symbol, range = "3mo", interval = "1d") 
   } catch (error) {
     console.error(`getHistoricalData error for ${symbol}:`, error);
     return [];
+  }
+}
+
+export async function getPrediction(symbol) {
+  try {
+    const formatted = formatSymbol(symbol);
+    const res = await fetch(`${PREDICT_URL}/${formatted}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+      }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data;
+  } catch (error) {
+    console.error(`getPrediction error for ${symbol}:`, error);
+    return null;
   }
 }
