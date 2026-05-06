@@ -38,6 +38,22 @@ const C = {
   dim:     "#8AA0B8",
 };
 
+const STOCK_UNIVERSE = [
+  { symbol: "RELIANCE",   name: "Reliance Industries", sector: "Energy" },
+  { symbol: "TCS",        name: "Tata Consultancy",    sector: "IT" },
+  { symbol: "HDFCBANK",   name: "HDFC Bank",           sector: "Finance" },
+  { symbol: "ICICIBANK",  name: "ICICI Bank",          sector: "Finance" },
+  { symbol: "INFOSYS",    name: "Infosys Ltd",         sector: "IT" },
+  { symbol: "BAJFINANCE", name: "Bajaj Finance",       sector: "Finance" },
+  { symbol: "WIPRO",      name: "Wipro Ltd",           sector: "IT" },
+  { symbol: "TATAMOTORS", name: "Tata Motors",         sector: "Auto" },
+  { symbol: "SBIN",       name: "State Bank India",    sector: "Finance" },
+  { symbol: "MARUTI",     name: "Maruti Suzuki",       sector: "Auto" },
+  { symbol: "SUNPHARMA",  name: "Sun Pharma",          sector: "Pharma" },
+  { symbol: "NTPC",       name: "NTPC Ltd",            sector: "Power" },
+  { symbol: "BTC",        name: "Bitcoin",             sector: "Crypto" },
+  { symbol: "ETH",        name: "Ethereum",            sector: "Crypto" },
+];
 
 // ─────────────────────────────────────────────────────────────
 //  UI COMPONENTS
